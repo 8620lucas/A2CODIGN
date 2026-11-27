@@ -1,13 +1,13 @@
-from dados import locacoes, filmes, clientes
+from dados import locacoes, casas, clientes
 from clientes import listar_clientes, buscar_cliente_por_id
-from filmes import listar_filmes, buscar_filme_por_id
+from casas import listar_casas, buscar_casa_por_id
 
 # --- Regras de negócio (constantes) ---
-LIMITE_LOCACOES_ATIVAS = 3   # máximo de filmes alugados simultaneamente por cliente
+LIMITE_LOCACOES_ATIVAS = 3   # máximo de casas alugadas simultaneamente por cliente
 PRAZO_MIN_DIAS = 1
-PRAZO_MAX_DIAS = 7
+PRAZO_MAX_DIAS = 30
 DESCONTO_COMBO = 0.15        # desconto se o cliente já tiver outra locação ativa
-MULTA_FIXA_POR_DIA = 5.00    # somada à diária, por dia de atraso
+MULTA_FIXA_POR_DIA = 50.00   # somada à diária, por dia de atraso na saída (checkout)
 
 
 
@@ -57,50 +57,62 @@ def selecionar_cliente():
     return cliente
 
 
-def selecionar_filme():
-    listar_filmes(apenas_disponiveis=True)
-    id_filme = ler_inteiro("\nDigite o ID do Filme desejado: ")
-    if id_filme is None:
+def selecionar_casa():
+    listar_casas(apenas_disponiveis=True)
+    id_casa = ler_inteiro("\nDigite o ID da Casa desejada: ")
+    if id_casa is None:
         return None
 
-    filme = buscar_filme_por_id(id_filme)
-    if not filme or filme["copias_disponiveis"] <= 0:
-        print("[ERRO] Filme inexistente ou sem cópias disponíveis em estoque.")
+    casa = buscar_casa_por_id(id_casa)
+    if not casa or casa["unidades_disponiveis"] <= 0:
+        print("[ERRO] Casa inexistente ou sem unidades disponíveis no momento.")
         return None
-    return filme
+    return casa
 
 
-def cliente_pode_assistir(cliente, filme):
-    if cliente["idade"] < filme["classificacao"]:
+def verificar_capacidade(casa, quantidade_hospedes):
+    if quantidade_hospedes > casa["capacidade_maxima"]:
         print(
-            f"[BLOQUEADO] O cliente tem {cliente['idade']} anos e o filme "
-            f"'{filme['titulo']}' tem classificação +{filme['classificacao']} anos."
+            f"[BLOQUEADO] A casa '{casa['nome']}' comporta no máximo "
+            f"{casa['capacidade_maxima']} hóspede(s), mas foram informados {quantidade_hospedes}."
         )
         return False
     return True
 
 
+def ler_quantidade_hospedes(casa):
+    quantidade = ler_inteiro(
+        "Quantidade de hóspedes: ",
+        "[ERRO] Informe um número válido de hóspedes.",
+    )
+    if quantidade is None or quantidade < 1:
+        print("[ERRO] É necessário informar pelo menos 1 hóspede.")
+        return None
+    return quantidade
+
+
 def ler_dias_locacao():
     dias = ler_inteiro(
-        f"Quantidade de dias de locação ({PRAZO_MIN_DIAS} a {PRAZO_MAX_DIAS}): ",
-        "[ERRO] Informe um número válido de dias.",
+        f"Quantidade de diárias ({PRAZO_MIN_DIAS} a {PRAZO_MAX_DIAS}): ",
+        "[ERRO] Informe um número válido de diárias.",
     )
     if dias is None:
         return None
     if not PRAZO_MIN_DIAS <= dias <= PRAZO_MAX_DIAS:
-        print(f"[ERRO] O prazo de locação deve ser entre {PRAZO_MIN_DIAS} e {PRAZO_MAX_DIAS} dias.")
+        print(f"[ERRO] O prazo de locação deve ser entre {PRAZO_MIN_DIAS} e {PRAZO_MAX_DIAS} diárias.")
         return None
     return dias
 
 
-def registrar_locacao(cliente, filme, dias, total):
-    filme["copias_disponiveis"] -= 1
+def registrar_locacao(cliente, casa, quantidade_hospedes, dias, total):
+    casa["unidades_disponiveis"] -= 1
     locacao = {
         "id": gerar_id_locacao(),
         "cliente_id": cliente["id"],
         "cliente_nome": cliente["nome"],
-        "filme_id": filme["id"],
-        "filme_titulo": filme["titulo"],
+        "casa_id": casa["id"],
+        "casa_nome": casa["nome"],
+        "quantidade_hospedes": quantidade_hospedes,
         "dias": dias,
         "valor_total": total,
         "ativa": True,
@@ -109,10 +121,10 @@ def registrar_locacao(cliente, filme, dias, total):
     return locacao
 
 
-def alugar_filme():
+def alugar_casa():
     print("\n--- REGISTRAR NOVA LOCAÇÃO ---")
-    if not clientes or not filmes:
-        print("[ERRO] É necessário ter clientes e filmes cadastrados.")
+    if not clientes or not casas:
+        print("[ERRO] É necessário ter clientes e casas cadastrados.")
         return
 
     cliente = selecionar_cliente()
@@ -121,39 +133,43 @@ def alugar_filme():
 
     ativas_cliente = locacoes_ativas(cliente["id"])
     if len(ativas_cliente) >= LIMITE_LOCACOES_ATIVAS:
-        print(f"[ERRO] Limite atingido! Este cliente já possui {LIMITE_LOCACOES_ATIVAS} filmes alugados simultaneamente.")
+        print(f"[ERRO] Limite atingido! Este cliente já possui {LIMITE_LOCACOES_ATIVAS} casas alugadas simultaneamente.")
         return
 
-    filme = selecionar_filme()
-    if not filme or not cliente_pode_assistir(cliente, filme):
+    casa = selecionar_casa()
+    if not casa:
+        return
+
+    quantidade_hospedes = ler_quantidade_hospedes(casa)
+    if quantidade_hospedes is None or not verificar_capacidade(casa, quantidade_hospedes):
         return
 
     dias = ler_dias_locacao()
     if dias is None:
         return
 
-    desconto, total = calcular_valor_locacao(dias, filme["valor_diaria"], bool(ativas_cliente))
-    locacao = registrar_locacao(cliente, filme, dias, total)
+    desconto, total = calcular_valor_locacao(dias, casa["valor_diaria"], bool(ativas_cliente))
+    locacao = registrar_locacao(cliente, casa, quantidade_hospedes, dias, total)
 
     print("\n[SUCESSO] Locação registrada!")
-    print(f"Contrato #{locacao['id']} | Cliente: {cliente['nome']} | Filme: {filme['titulo']} ({dias} dia(s))")
+    print(f"Contrato #{locacao['id']} | Cliente: {cliente['nome']} | Casa: {casa['nome']} ({dias} diária(s))")
     if desconto > 0:
         print(f"Desconto Combo ({DESCONTO_COMBO:.0%} por múltiplas locações): -R$ {desconto:.2f}")
     print(f"Valor Total: R$ {total:.2f}")
 
 
 
-def devolver_filme():
-    print("\n--- DEVOLUÇÃO DE FILME ---")
+def devolver_casa():
+    print("\n--- ENCERRAMENTO DE LOCAÇÃO (CHECKOUT) ---")
     ativas = locacoes_ativas()
     if not ativas:
         print("Não há locações ativas no momento.")
         return
 
     for l in ativas:
-        print(f"Contrato ID: {l['id']} | Cliente: {l['cliente_nome']} | Filme: {l['filme_titulo']} | Prazo: {l['dias']} dia(s)")
+        print(f"Contrato ID: {l['id']} | Cliente: {l['cliente_nome']} | Casa: {l['casa_nome']} | Prazo: {l['dias']} diária(s)")
 
-    id_loc = ler_inteiro("\nDigite o ID do Contrato para devolução: ")
+    id_loc = ler_inteiro("\nDigite o ID do Contrato para encerrar: ")
     if id_loc is None:
         return
 
@@ -162,32 +178,32 @@ def devolver_filme():
         print("[ERRO] Contrato ativo não encontrado.")
         return
 
-    filme = buscar_filme_por_id(locacao["filme_id"])
+    casa = buscar_casa_por_id(locacao["casa_id"])
 
     try:
-        dias_atraso = max(0, int(input("Houve dias de atraso na entrega? (0 se no prazo): ")))
+        dias_atraso = max(0, int(input("Houve dias de atraso na saída (checkout)? (0 se no prazo): ")))
     except ValueError:
         dias_atraso = 0
 
-    if dias_atraso > 0 and filme:
-        multa = calcular_multa(dias_atraso, filme["valor_diaria"])
+    if dias_atraso > 0 and casa:
+        multa = calcular_multa(dias_atraso, casa["valor_diaria"])
         locacao["valor_total"] += multa
         print(f"[AVISO] Multa por atraso ({dias_atraso} dia(s)): R$ {multa:.2f}")
 
     locacao["ativa"] = False
-    if filme:
-        filme["copias_disponiveis"] += 1
+    if casa:
+        casa["unidades_disponiveis"] += 1
 
-    print(f"[SUCESSO] Filme devolvido ao estoque! Valor final acertado: R$ {locacao['valor_total']:.2f}")
+    print(f"[SUCESSO] Casa liberada para nova locação! Valor final acertado: R$ {locacao['valor_total']:.2f}")
 
 
 
 def exibir_relatorios():
     print("\n=== RELATÓRIOS GERENCIAIS ===")
     print(f"Clientes Cadastrados          : {len(clientes)}")
-    print(f"Títulos no Catálogo           : {len(filmes)}")
-    print(f"Cópias Disponíveis na Loja    : {sum(f['copias_disponiveis'] for f in filmes)}")
-    print(f"Filmes Atualmente Alugados    : {len(locacoes_ativas())}")
+    print(f"Casas no Catálogo             : {len(casas)}")
+    print(f"Unidades Disponíveis          : {sum(c['unidades_disponiveis'] for c in casas)}")
+    print(f"Casas Atualmente Alugadas     : {len(locacoes_ativas())}")
     print(f"Total de Locações Realizadas  : {len(locacoes)}")
     print(f"Faturamento Total Acumulado   : R$ {sum(l['valor_total'] for l in locacoes):.2f}")
 
@@ -197,18 +213,18 @@ def exibir_relatorios():
         return
 
     for l in locacoes:
-        status = "ALUGADO" if l["ativa"] else "DEVOLVIDO"
-        print(f"#{l['id']} | {l['cliente_nome']} -> '{l['filme_titulo']}' | R$ {l['valor_total']:.2f} | [{status}]")
+        status = "ALUGADA" if l["ativa"] else "ENCERRADA"
+        print(f"#{l['id']} | {l['cliente_nome']} -> '{l['casa_nome']}' | R$ {l['valor_total']:.2f} | [{status}]")
 
 
 
 def menu_locacoes():
-    acoes = {"1": alugar_filme, "2": devolver_filme}
+    acoes = {"1": alugar_casa, "2": devolver_casa}
 
     while True:
         print("\n=== GERENCIAR LOCAÇÕES ===")
-        print("1 - Alugar Filme")
-        print("2 - Devolver Filme")
+        print("1 - Alugar Casa")
+        print("2 - Encerrar Locação (Checkout)")
         print("0 - Voltar ao Menu Principal")
         opcao = input("Escolha uma opção: ").strip()
 

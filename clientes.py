@@ -31,8 +31,8 @@ def cadastrar_cliente():
 
     try:
         idade = int(input("Idade do cliente: "))
-        if idade < 10 or idade > 120:
-            print("[ERRO] Idade inválida para cadastro (mínimo 10 anos).")
+        if idade < 18 or idade > 120:
+            print("[ERRO] Idade inválida para cadastro (é necessário ser maior de idade para alugar uma casa).")
             return
     except ValueError:
         print("[ERRO] A idade deve ser um número inteiro.")
@@ -99,10 +99,10 @@ def excluir_cliente(locacoes):
         print("[ERRO] Cliente não encontrado.")
         return
 
-    # Regra de negócio: impedir exclusão de cliente com filme pendente de devolução
+    # Regra de negócio: impedir exclusão de cliente com locação pendente de encerramento
     for loc in locacoes:
         if loc["cliente_id"] == id_busca and loc["ativa"]:
-            print("[ERRO] Este cliente possui filmes alugados em aberto e não pode ser excluído.")
+            print("[ERRO] Este cliente possui casas alugadas em aberto e não pode ser excluído.")
             return
 
     clientes.remove(cliente)
